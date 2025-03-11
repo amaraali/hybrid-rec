@@ -37,9 +37,24 @@ class SpotifyModel:
             else:
                 logger.warning(f"SVD model file {svd_path} not found")
 
-            # Load data
-            self.data_cleaned = pd.read_csv('data/data_cleaned.csv')
-            self.new_df = pd.read_csv('data/user_matrix.csv')
+            # Load data with error handling
+            try:
+                self.data_cleaned = pd.read_csv('data/data_cleaned.csv')
+                self.new_df = pd.read_csv('data/user_matrix.csv')
+                
+                if self.data_cleaned.empty:
+                    logger.warning("data_cleaned.csv is empty")
+                if self.new_df.empty:
+                    logger.warning("user_matrix.csv is empty")
+                    
+            except FileNotFoundError as e:
+                logger.error(f"Data file not found: {str(e)}")
+                self.data_cleaned = pd.DataFrame()
+                self.new_df = pd.DataFrame()
+            except Exception as e:
+                logger.error(f"Error loading data: {str(e)}")
+                self.data_cleaned = pd.DataFrame()
+                self.new_df = pd.DataFrame()
 
             # Prepare content features
             self.data_content_features = self.data_cleaned[['popularity', 'danceability', 'energy', 

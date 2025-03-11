@@ -4,6 +4,7 @@ from spotify_model import SpotifyModel
 from spotify_client import initialize_spotify_client
 from cache import SpotifyCache
 from recommender import Recommender
+import pandas as pd
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -179,7 +180,7 @@ if track_input:
         st.sidebar.error(str(e))
 
 # Main content area with tabs
-tab1, tab2 = st.tabs(["Recommendations", "About"])
+tab1, tab2, tab3, tab4, tab5 = st.tabs(["Recommendations", "User Matrix", "Statistics", "Sample Tracks", "About"])
 
 with tab1:
     if track_id and st.sidebar.button("🔍 Get Recommendations"):
@@ -232,6 +233,146 @@ with tab1:
             st.info("Please make sure you've entered valid User ID and Track ID")
 
 with tab2:
+    st.header("User Matrix Data")
+    if not spotify_model.new_df.empty:
+        # Add search/filter functionality
+        search_user = st.number_input("Search by User ID", min_value=1, max_value=1000, value=1)
+        filtered_df = spotify_model.new_df[spotify_model.new_df['user_id'] == search_user]
+        
+        # Display basic statistics
+        st.subheader("User Listening Statistics")
+        col1, col2 = st.columns(2)
+        with col1:
+            st.metric("Total Tracks", len(filtered_df))
+            st.metric("Average Rating", round(filtered_df['rating'].mean(), 2))
+        with col2:
+            st.metric("Highest Rated", filtered_df['rating'].max())
+            st.metric("Lowest Rated", filtered_df['rating'].min())
+            
+        # Display the filtered dataframe
+        st.subheader("User Ratings")
+        st.dataframe(filtered_df.style.background_gradient(subset=['rating'], cmap='viridis'))
+    else:
+        st.warning("User matrix data is not available")
+
+with tab3:
+    st.header("User Matrix Statistics")
+    if not spotify_model.new_df.empty:
+        # Overall statistics
+        st.subheader("Overall Statistics")
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            st.metric("Total Users", spotify_model.new_df['user_id'].nunique())
+            st.metric("Total Tracks", spotify_model.new_df['track_id'].nunique())
+        with col2:
+            st.metric("Average Rating", round(spotify_model.new_df['rating'].mean(), 2))
+            st.metric("Rating Std Dev", round(spotify_model.new_df['rating'].std(), 2))
+        with col3:
+            st.metric("Total Ratings", len(spotify_model.new_df))
+            st.metric("Rating Density", f"{round(len(spotify_model.new_df)/(spotify_model.new_df['user_id'].nunique()*spotify_model.new_df['track_id'].nunique())*100, 2)}%")
+        
+        # Rating distribution
+        st.subheader("Rating Distribution")
+        rating_dist = pd.DataFrame(spotify_model.new_df['rating'].value_counts().sort_index())
+        st.bar_chart(rating_dist)
+        
+        # User activity distribution
+        st.subheader("User Activity Distribution")
+        user_activity = pd.DataFrame(spotify_model.new_df['user_id'].value_counts())
+        st.line_chart(user_activity)
+    else:
+        st.warning("User matrix data is not available")
+
+with tab4:
+    st.header("🎵 Sample Tracks to Try")
+    
+    # Create sample categories
+    categories = {
+        "Popular Acoustic": spotify_model.data_cleaned[
+            (spotify_model.data_cleaned['track_genre'] == 'acoustic') & 
+            (spotify_model.data_cleaned['popularity'] > 0.7)
+        ].head(10),
+        
+        "High Energy": spotify_model.data_cleaned[
+            (spotify_model.data_cleaned['energy'] > 0.8)
+        ].head(10),
+        
+        "Chill Tracks": spotify_model.data_cleaned[
+            (spotify_model.data_cleaned['energy'] < 0.4) & 
+            (spotify_model.data_cleaned['acousticness'] > 0.6)
+        ].head(10)
+    }
+    
+    # Display tracks by category with table layout
+    for category, tracks in categories.items():
+        st.subheader(category)
+        
+        # Prepare table data
+        table_data = []
+        for _, track in tracks.iterrows():
+            # Format track info for table
+            table_data.append({
+                "Track Name": track['track_name'],
+                "Artists": track['artists'],
+                "Genre": track['track_genre'],
+                "Track ID": track['track_id'],
+                "Actions": track['track_id']  # We'll use this for the button
+            })
+        
+        # Convert to DataFrame for display
+        df = pd.DataFrame(table_data)
+        
+        # Custom CSS to style the table
+        st.markdown("""
+        <style>
+        .track-table {
+            font-size: 0.9rem;
+            margin: 1rem 0;
+        }
+        .copy-button {
+            background-color: #1DB954;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            padding: 4px 8px;
+            cursor: pointer;
+        }
+        </style>
+        """, unsafe_allow_html=True)
+        
+        # Create columns for the table
+        cols = st.columns([3, 2, 1.5, 2, 1])
+        cols[0].write("**Track Name**")
+        cols[1].write("**Artists**")
+        cols[2].write("**Genre**")
+        cols[3].write("**Track ID**")
+        # cols[4].write("**Action**")
+        
+        # Display each row
+        for idx, row in df.iterrows():
+            cols = st.columns([3, 2, 1.5, 2, 1])
+            cols[0].write(row["Track Name"])
+            cols[1].write(row["Artists"])
+            cols[2].write(row["Genre"])
+            cols[3].write(row["Track ID"])
+            
+            # Create unique key for each button
+            button_key = f"copy_{idx}_{row['Track ID']}"
+            
+            # Copy button with clipboard.js functionality
+            # cols[4].markdown(f"""
+            #     <button onclick="navigator.clipboard.writeText('{row['Track ID']}')" 
+            #             class="copy-button" 
+            #             title="Copy Track ID to clipboard">
+            #         Copy ID
+            #     </button>
+            #     """, 
+            #     unsafe_allow_html=True
+            # )
+        
+        st.divider()
+
+with tab5:
     st.markdown("""
     ### 🎵 About the Recommender
      #### 🎯 Content-based Filtering
